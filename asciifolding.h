@@ -120,7 +120,6 @@ unsigned int asciifolding(const unsigned char * input_utf8, unsigned int input_l
                     unsigned int char_is_valid = char_length_utf8 > 0;
 
                     unsigned long long index = 5381;
-                    int invalid_index = (input_utf8[i] - 128) * 2;
 
                     switch (char_length_utf8) {
                         case 4: {
@@ -136,27 +135,26 @@ unsigned int asciifolding(const unsigned char * input_utf8, unsigned int input_l
                         case 2: {
                             index = (index * ASCIIFOLDING_HASH_WEIGHT) + input_utf8[i++];
                             char_is_valid &= (input_utf8[i] & 192) == 128;
-                        }
-
-                        case 1: {
                             index = (index * ASCIIFOLDING_HASH_WEIGHT) + input_utf8[i++];
                         }
                     }
 
                     index = ((index % ASCIIFOLDING_HASH_TABLE_SIZE) * 5) + 256;
-                    index *= char_is_valid;
-                    index += invalid_index * (char_is_valid == 0);
 
-                    unsigned char char_length_ascii = ascii_tape[index];
-                    ascii_length += char_length_ascii;
+                    if (char_is_valid) {
+                        unsigned char char_length_ascii = ascii_tape[index];
+                        ascii_length += char_length_ascii;
 
-                    unsigned char *replacement = &ascii_tape[index + 1];
+                        unsigned char *replacement = &ascii_tape[index + 1];
+                        *(output_ascii++) = *(replacement++);
 
-                    switch (char_length_ascii) {
-                        case 4: *(output_ascii++) = *(replacement++);
-                        case 3: *(output_ascii++) = *(replacement++);
-                        case 2: *(output_ascii++) = *(replacement++);
-                        case 1: *(output_ascii++) = *(replacement++);
+                        switch (char_length_ascii) {
+                            case 4: *(output_ascii++) = *(replacement++);
+                            case 3: *(output_ascii++) = *(replacement++);
+                            case 2: *(output_ascii++) = *(replacement++);
+                        }
+                    } else {
+                        *(output_ascii++) = input_utf8[i++];
                     }
                 }
             }
