@@ -66,25 +66,33 @@ def map_unicode_to_ascii():
             unicodes = []
             asciis = []
 
+def hash_value(encoded, unicode, tape_size, w):
+    idx = 5381
+
+    if len(encoded) == 1:
+        idx = (idx * w) + ord(unicode)
+    if len(encoded) == 2:
+        idx = (idx * w) + encoded[0]
+        idx = (idx * w) + encoded[1]
+    if len(encoded) == 3:
+        idx = (idx * w) + encoded[0]
+        idx = (idx * w) + encoded[1]
+        idx = (idx * w) + encoded[2]
+
+    idx = idx % tape_size
+
+    return idx
+
+def hash_index(encoded, unicode, tape_size, w):
+    return (hash_value(encoded, unicode, tape_size , w) * 5) + 256
+
 def is_valid_lut(lut_size, w):
     lut = [ None for i in range(lut_size) ]
     invalid = False
     processed = 0
 
     for unicode, encoded, asciis in map_unicode_to_ascii():
-        idx = 5381
-
-        if len(encoded) == 1:
-            idx = (idx * w) + ord(unicode)
-        if len(encoded) == 2:
-            idx = (idx * w) + encoded[0]
-            idx = (idx * w) + encoded[1]
-        if len(encoded) == 3:
-            idx = (idx * w) + encoded[0]
-            idx = (idx * w) + encoded[1]
-            idx = (idx * w) + encoded[2]
-
-        idx = idx % lut_size
+        idx = hash_value(encoded, unicode, lut_size, w)
         processed += 1
 
         if lut[idx] is None:
@@ -95,39 +103,42 @@ def is_valid_lut(lut_size, w):
     return True
 
 def optimize_hash_params():
-    return 3242, 64
+    prev_optim_lut_size = 3242
 
     from math import ceil
 
     matches = []
     min_size = len([ _ for _ in map_unicode_to_ascii() ]) * 2
-    best_match = min_size * 100
 
-    for w in range(513):
-        step = ceil(min_size / 2)
-        max_size = best_match
-        previously_found = False
+    for best_match in [ prev_optim_lut_size + 1, min_size * 100 ]:
+        for w in range(31, 129):
+            step = ceil(min_size / 2)
+            max_size = best_match
+            previously_found = False
 
-        while 1:
-            print(w, max_size, step)
-            found = False
+            while 1:
+                print(w, max_size, step)
+                found = False
 
-            for lut_size in range(min_size, max_size, step):
-                if is_valid_lut(lut_size, w):
-                    max_size = lut_size
-                    found = True
-                    previously_found = True
-                    matches.append([lut_size, w])
+                for lut_size in range(min_size, max_size, step):
+                    if is_valid_lut(lut_size, w):
+                        max_size = lut_size
+                        found = True
+                        previously_found = True
+                        matches.append([lut_size, w])
 
-                    if lut_size < best_match:
-                        best_match = lut_size
+                        if lut_size < best_match:
+                            best_match = lut_size
 
+                        break
+
+                if step == 1 or (previously_found is False and best_match == min_size * 100):
                     break
 
-            if step == 1 or (previously_found is False and best_match == min_size * 100):
-                break
+                step = ceil(step / 2)
 
-            step = ceil(step / 2)
+        if len(matches) > 0:
+            break
 
     matches.sort(key=lambda x: x[0])
 
@@ -141,22 +152,7 @@ def create_tape(tape_size, w):
         tape[i - 127] = i
 
     for unicode, encoded, asciis in map_unicode_to_ascii():
-        idx = 5381
-
-        if len(encoded) == 1:
-            idx = (idx * w) + ord(unicode)
-        if len(encoded) == 2:
-            idx = (idx * w) + encoded[0]
-            idx = (idx * w) + encoded[1]
-        if len(encoded) == 3:
-            idx = (idx * w) + encoded[0]
-            idx = (idx * w) + encoded[1]
-            idx = (idx * w) + encoded[2]
-
-        idx = idx % tape_size
-        idx *= 5
-        idx += 256
-
+        idx = hash_index(encoded, unicode, tape_size, w)
         tape[idx] = len(asciis)
         idx += 1
 

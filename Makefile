@@ -1,7 +1,7 @@
 GCC_OPTIONS=-std=c99 -march=native -O3 -Wall
 
 build_tape:
-	wget https://github.com/apache/lucene/blob/main/lucene/analysis/common/src/java/org/apache/lucene/analysis/miscellaneous/ASCIIFoldingFilter.java \
+	wget https://raw.githubusercontent.com/apache/lucene/main/lucene/analysis/common/src/java/org/apache/lucene/analysis/miscellaneous/ASCIIFoldingFilter.java \
 	&& python gen_tape.py > asciifolding_tape.h \
 	&& rm ASCIIFoldingFilter.java
 

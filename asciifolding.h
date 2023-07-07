@@ -122,7 +122,7 @@ unsigned int asciifolding(const unsigned char * input_utf8, unsigned int input_l
 
                     index = ((index % ASCIIFOLDING_HASH_TABLE_SIZE) * 5) + 256;
 
-                    unsigned int char_length_ascii = (unsigned int) ascii_tape[index];
+                    unsigned char char_length_ascii = ascii_tape[index];
                     ascii_length += char_length_ascii;
 
                     unsigned char *replacement = &ascii_tape[index + 1];
