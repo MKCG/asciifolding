@@ -79,7 +79,7 @@ unsigned int asciifolding(const unsigned char * input_utf8, unsigned int input_l
                     int is_ascii     = __builtin_ctz(is_not_ascii);
 
                     if (is_ascii == 32) {
-                        _mm256_storeu_si256((__m256i *) output_ascii, masked);
+                        _mm256_storeu_si256((__m256i *) output_ascii, vector);
                         i += 32;
                         output_ascii += 32;
                         ascii_length += 32;
