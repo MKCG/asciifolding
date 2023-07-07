@@ -106,63 +106,87 @@ unsigned int asciifolding(const unsigned char * input_utf8, unsigned int input_l
             if (input_utf8[i] < 128) {
                 *(output_ascii++) = input_utf8[i++];
                 ascii_length++;
-                continue;
+            } else {
+                unsigned int char_length_utf8 = lut_char_lengths_utf8[input_utf8[i]];
+
+                unsigned long long index = 5381;
+
+                switch (char_length_utf8) {
+                    case 4: index = (index * ASCIIFOLDING_HASH_WEIGHT) + input_utf8[i++];
+                    case 3: index = (index * ASCIIFOLDING_HASH_WEIGHT) + input_utf8[i++];
+                    case 2: index = (index * ASCIIFOLDING_HASH_WEIGHT) + input_utf8[i++];
+                    case 1: index = (index * ASCIIFOLDING_HASH_WEIGHT) + input_utf8[i++];
+                }
+
+                index = ((index % ASCIIFOLDING_HASH_TABLE_SIZE) * 5) + 256;
+
+                unsigned int char_length_ascii = (unsigned int) ascii_tape[index];
+                ascii_length += char_length_ascii;
+
+                unsigned char *replacement = &ascii_tape[index + 1];
+
+                switch (char_length_ascii) {
+                    case 4: *(output_ascii++) = *(replacement++);
+                    case 3: *(output_ascii++) = *(replacement++);
+                    case 2: *(output_ascii++) = *(replacement++);
+                    case 1: *(output_ascii++) = *(replacement++);
+                }
             }
+        #else
+            unsigned int char_length_utf8 = lut_char_lengths_utf8[input_utf8[i]];
+            unsigned int char_is_valid = char_length_utf8 > 0;
+            unsigned int rehash = 0;
+
+            unsigned long long index = 5381;
+            int invalid_index = (input_utf8[i] - 128) * 2;
+
+            // 1st byte
+            index = (index * ASCIIFOLDING_HASH_WEIGHT) + input_utf8[i];
+            i++;
+
+            // 2nd byte
+            char_is_valid &= ((input_utf8[i] & 192) == 128) | (char_length_utf8 < 2);
+            rehash = char_length_utf8 > 1;
+            index = (index * (1 + ((ASCIIFOLDING_HASH_WEIGHT - 1) * rehash))) + (input_utf8[i] * rehash);
+            i += char_length_utf8 > 1;
+
+            // 3nd byte
+            char_is_valid &= ((input_utf8[i] & 192) == 128) | (char_length_utf8 < 3);
+            rehash = char_length_utf8 > 2;
+            index = (index * (1 + ((ASCIIFOLDING_HASH_WEIGHT - 1) * rehash))) + (input_utf8[i] * rehash);
+            i += char_length_utf8 > 2;
+
+            // 4th byte
+            char_is_valid &= ((input_utf8[i] & 192) == 128) | (char_length_utf8 < 4);
+            rehash = char_length_utf8 > 3;
+            index = (index * (1 + ((ASCIIFOLDING_HASH_WEIGHT - 1) * rehash))) + (input_utf8[i] * rehash);
+            i += char_length_utf8 > 3;
+
+            // tape access
+            index = ((index % ASCIIFOLDING_HASH_TABLE_SIZE) * 5) + 256;
+            index = (index * char_is_valid) + (invalid_index * (char_is_valid == 0));
+
+            unsigned int char_length_ascii = (unsigned int) ascii_tape[index];
+            ascii_length += char_length_ascii;
+
+            // output
+            index++;
+
+            *output_ascii = ascii_tape[index];
+            output_ascii++;
+
+            index += char_length_ascii > 1;
+            *output_ascii = ascii_tape[index];
+            output_ascii += char_length_ascii > 1;
+
+            index += char_length_ascii > 2;
+            *output_ascii = ascii_tape[index];
+            output_ascii += char_length_ascii > 2;
+
+            index += char_length_ascii > 3;
+            *output_ascii = ascii_tape[index];
+            output_ascii += char_length_ascii > 3;
         #endif
-
-        unsigned int char_length_utf8 = lut_char_lengths_utf8[input_utf8[i]];
-        unsigned int char_is_valid = char_length_utf8 > 0;
-        unsigned int rehash = 0;
-
-        unsigned long long index = 5381;
-        int invalid_index = (input_utf8[i] - 128) * 2;
-
-        // 1st byte
-        index = (index * ASCIIFOLDING_HASH_WEIGHT) + input_utf8[i];
-        i++;
-
-        // 2nd byte
-        char_is_valid &= ((input_utf8[i] & 192) == 128) | (char_length_utf8 < 2);
-        rehash = char_length_utf8 > 1;
-        index = (index * (1 + ((ASCIIFOLDING_HASH_WEIGHT - 1) * rehash))) + (input_utf8[i] * rehash);
-        i += char_length_utf8 > 1;
-
-        // 3nd byte
-        char_is_valid &= ((input_utf8[i] & 192) == 128) | (char_length_utf8 < 3);
-        rehash = char_length_utf8 > 2;
-        index = (index * (1 + ((ASCIIFOLDING_HASH_WEIGHT - 1) * rehash))) + (input_utf8[i] * rehash);
-        i += char_length_utf8 > 2;
-
-        // 4th byte
-        char_is_valid &= ((input_utf8[i] & 192) == 128) | (char_length_utf8 < 4);
-        rehash = char_length_utf8 > 3;
-        index = (index * (1 + ((ASCIIFOLDING_HASH_WEIGHT - 1) * rehash))) + (input_utf8[i] * rehash);
-        i += char_length_utf8 > 3;
-
-        // tape access
-        index = ((index % ASCIIFOLDING_HASH_TABLE_SIZE) * 5) + 256;
-        index = (index * char_is_valid) + (invalid_index * (char_is_valid == 0));
-
-        unsigned int char_length_ascii = (unsigned int) ascii_tape[index];
-        ascii_length += char_length_ascii;
-
-        // output
-        index++;
-
-        *output_ascii = ascii_tape[index];
-        output_ascii++;
-
-        index += char_length_ascii > 1;
-        *output_ascii = ascii_tape[index];
-        output_ascii += char_length_ascii > 1;
-
-        index += char_length_ascii > 2;
-        *output_ascii = ascii_tape[index];
-        output_ascii += char_length_ascii > 2;
-
-        index += char_length_ascii > 3;
-        *output_ascii = ascii_tape[index];
-        output_ascii += char_length_ascii > 3;
     }
 
     *output_ascii = 0;
