@@ -1,7 +1,9 @@
 /**
- * Author : Kévin Masseix - masseix.kevin@gmail.com
+ * Author   : Kévin Masseix
+ * Email    : masseix.kevin@gmail.com
+ * Github   : https://github.com/MKCG/
+ * LinkedIn : https://www.linkedin.com/in/k%C3%A9vin-m-228a328b/
  */
-
 #ifndef ASCIIFOLDING_FILTER_H
 #define ASCIIFOLDING_FILTER_H
 
@@ -58,9 +60,14 @@ unsigned int lut_char_lengths_utf8[256] = {
 /**
  * Convert an UTF-8 encoded string into an ASCII encoded string using the same rules as defined by the ASCII folding filter in Lucene
  *
+ * Important :
+ *     it is possible for a valid UTF8 character to be wrongfully mapped into incorrect ASCII characters
+ *     if the UTF8 character is not handled by the ASCII folding filter from Lucene
+ *
  * @param  input_utf8   UTF-8 encoded string, an extra 3 bytes must be allocated at the end
  * @param  input_length
  * @param  output_ascii ASCII encoded string
+ *
  * @return              Length of the ascii encoded string
  */
 unsigned int asciifolding(const unsigned char * input_utf8, unsigned int input_length, unsigned char * output_ascii) {
@@ -110,17 +117,35 @@ unsigned int asciifolding(const unsigned char * input_utf8, unsigned int input_l
             } else {
                 process_non_ascii: {
                     unsigned int char_length_utf8 = lut_char_lengths_utf8[input_utf8[i]];
+                    unsigned int char_is_valid = char_length_utf8 > 0;
 
                     unsigned long long index = 5381;
+                    int invalid_index = (input_utf8[i] - 128) * 2;
 
                     switch (char_length_utf8) {
-                        case 4: index = (index * ASCIIFOLDING_HASH_WEIGHT) + input_utf8[i++];
-                        case 3: index = (index * ASCIIFOLDING_HASH_WEIGHT) + input_utf8[i++];
-                        case 2: index = (index * ASCIIFOLDING_HASH_WEIGHT) + input_utf8[i++];
-                        case 1: index = (index * ASCIIFOLDING_HASH_WEIGHT) + input_utf8[i++];
+                        case 4: {
+                            index = (index * ASCIIFOLDING_HASH_WEIGHT) + input_utf8[i++];
+                            char_is_valid &= (input_utf8[i] & 192) == 128;
+                        }
+
+                        case 3: {
+                            index = (index * ASCIIFOLDING_HASH_WEIGHT) + input_utf8[i++];
+                            char_is_valid &= (input_utf8[i] & 192) == 128;
+                        }
+
+                        case 2: {
+                            index = (index * ASCIIFOLDING_HASH_WEIGHT) + input_utf8[i++];
+                            char_is_valid &= (input_utf8[i] & 192) == 128;
+                        }
+
+                        case 1: {
+                            index = (index * ASCIIFOLDING_HASH_WEIGHT) + input_utf8[i++];
+                        }
                     }
 
                     index = ((index % ASCIIFOLDING_HASH_TABLE_SIZE) * 5) + 256;
+                    index *= char_is_valid;
+                    index += invalid_index * (char_is_valid == 0);
 
                     unsigned char char_length_ascii = ascii_tape[index];
                     ascii_length += char_length_ascii;
