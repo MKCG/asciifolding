@@ -169,7 +169,16 @@ def create_tape(tape_size, w):
 size, w = optimize_hash_params()
 tape = create_tape(size, w)
 
-print(f'hash table size    : {size}')
-print(f'hash multiplicator : {w}')
-print(f'tape length : {len(tape)}')
-# print(tape)
+import json
+
+print(f'''#ifndef ASCIIFOLDING_TAPE_H
+#define ASCIIFOLDING_TAPE_H
+
+#define ASCIIFOLDING_HASH_TABLE_SIZE {size}
+#define ASCIIFOLDING_HASH_WEIGHT {w}
+
+unsigned char ascii_tape[{len(tape)}] = {{
+    {json.dumps(tape)[1:-1]}
+}};
+
+#endif''')
