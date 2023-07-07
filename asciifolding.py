@@ -77,12 +77,12 @@ def is_valid_lut(lut_size, w):
         if len(encoded) == 1:
             idx = (idx * w) + ord(unicode)
         if len(encoded) == 2:
-            idx = (idx * w) + (encoded[1] & 63)
-            idx = (idx * w) + (encoded[0] & 31)
+            idx = (idx * w) + encoded[0]
+            idx = (idx * w) + encoded[1]
         if len(encoded) == 3:
-            idx = (idx * w) + (encoded[0] & 31)
-            idx = (idx * w) + (encoded[1] & 63)
-            idx = (idx * w) + (encoded[2] & 63)
+            idx = (idx * w) + encoded[0]
+            idx = (idx * w) + encoded[1]
+            idx = (idx * w) + encoded[2]
 
         idx = idx % lut_size
         processed += 1
@@ -95,19 +95,21 @@ def is_valid_lut(lut_size, w):
     return True
 
 def optimize_hash_params():
-    return 8314, 513
+    return 3242, 64
 
     from math import ceil
 
     matches = []
+    min_size = len([ _ for _ in map_unicode_to_ascii() ]) * 2
+    best_match = min_size * 100
 
-    for w in [31, 33, 63, 65, 127, 129, 255, 257, 511, 513]:
-        step = 1000
-        min_size = len([ _ for _ in map_unicode_to_ascii() ]) * 2
-        max_size = min_size * 100
+    for w in range(513):
+        step = ceil(min_size / 2)
+        max_size = best_match
         previously_found = False
 
         while 1:
+            print(w, max_size, step)
             found = False
 
             for lut_size in range(min_size, max_size, step):
@@ -116,9 +118,13 @@ def optimize_hash_params():
                     found = True
                     previously_found = True
                     matches.append([lut_size, w])
+
+                    if lut_size < best_match:
+                        best_match = lut_size
+
                     break
 
-            if step == 1 or previously_found is False:
+            if step == 1 or (previously_found is False and best_match == min_size * 100):
                 break
 
             step = ceil(step / 2)
@@ -140,15 +146,15 @@ def create_tape(tape_size, w):
         if len(encoded) == 1:
             idx = (idx * w) + ord(unicode)
         if len(encoded) == 2:
-            idx = (idx * w) + (encoded[1] & 63)
-            idx = (idx * w) + (encoded[0] & 31)
+            idx = (idx * w) + encoded[0]
+            idx = (idx * w) + encoded[1]
         if len(encoded) == 3:
-            idx = (idx * w) + (encoded[0] & 31)
-            idx = (idx * w) + (encoded[1] & 63)
-            idx = (idx * w) + (encoded[2] & 63)
+            idx = (idx * w) + encoded[0]
+            idx = (idx * w) + encoded[1]
+            idx = (idx * w) + encoded[2]
 
-        idx *= 5
         idx = idx % tape_size
+        idx *= 5
         idx += 256
 
         tape[idx] = len(asciis)
@@ -166,3 +172,4 @@ tape = create_tape(size, w)
 print(f'hash table size    : {size}')
 print(f'hash multiplicator : {w}')
 print(f'tape length : {len(tape)}')
+# print(tape)
