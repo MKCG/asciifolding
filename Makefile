@@ -1,10 +1,10 @@
-compile:
-	gcc -O3 -o asciifolding asciifolding.c
+compile_branchless:
+	gcc -march=native -O3 -o asciifolding asciifolding.c
 
 compile_branchy:
-	gcc -O3 -o asciifolding asciifolding.c -DASCIIFOLDING_IS_BRANCHY
+	gcc -march=native -O3 -o asciifolding asciifolding.c -DASCIIFOLDING_IS_BRANCHY -DASCIIFOLDING_USE_SIMD
 
-run: compile
+run_branchless: compile_branchless
 	./asciifolding
 
 run_branchy: compile_branchy
