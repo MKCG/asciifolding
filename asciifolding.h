@@ -47,8 +47,12 @@ unsigned int lut_char_lengths_utf8[256] = {
 
 #include "asciifolding_tape.h"
 
-#if defined(ASCIIFOLDING_IS_BRANCHY) && defined(__AVX2__) && defined(ASCIIFOLDING_USE_SIMD)
-    #include <immintrin.h>
+#if defined(ASCIIFOLDING_IS_BRANCHY)
+    #if defined(__AVX2__) && defined(ASCIIFOLDING_USE_SIMD)
+        #include <immintrin.h>
+    #else
+        #include <string.h>
+    #endif
 #endif
 
 /**
@@ -86,18 +90,15 @@ unsigned int asciifolding(const unsigned char * input_utf8, unsigned int input_l
                         }
 
                         ascii_length += is_ascii;
+                        goto process_non_ascii;
                     }
                 }
             #else
                 if (sizeof(unsigned long long) == 8 && i + 8 < input_length && (*((unsigned long long *) &input_utf8[i]) & 0x8080808080808080) == 0) {
-                    *(output_ascii++) = input_utf8[i++];
-                    *(output_ascii++) = input_utf8[i++];
-                    *(output_ascii++) = input_utf8[i++];
-                    *(output_ascii++) = input_utf8[i++];
-                    *(output_ascii++) = input_utf8[i++];
-                    *(output_ascii++) = input_utf8[i++];
-                    *(output_ascii++) = input_utf8[i++];
-                    *(output_ascii++) = input_utf8[i++];
+                    memcpy(output_ascii, &input_utf8[i], 8);
+                    // *((unsigned long long*) output_ascii) = *((unsigned long long *) &input_utf8[i]);
+                    i += 8;
+                    output_ascii += 8;
                     ascii_length += 8;
                     continue;
                 }
@@ -107,29 +108,31 @@ unsigned int asciifolding(const unsigned char * input_utf8, unsigned int input_l
                 *(output_ascii++) = input_utf8[i++];
                 ascii_length++;
             } else {
-                unsigned int char_length_utf8 = lut_char_lengths_utf8[input_utf8[i]];
+                process_non_ascii: {
+                    unsigned int char_length_utf8 = lut_char_lengths_utf8[input_utf8[i]];
 
-                unsigned long long index = 5381;
+                    unsigned long long index = 5381;
 
-                switch (char_length_utf8) {
-                    case 4: index = (index * ASCIIFOLDING_HASH_WEIGHT) + input_utf8[i++];
-                    case 3: index = (index * ASCIIFOLDING_HASH_WEIGHT) + input_utf8[i++];
-                    case 2: index = (index * ASCIIFOLDING_HASH_WEIGHT) + input_utf8[i++];
-                    case 1: index = (index * ASCIIFOLDING_HASH_WEIGHT) + input_utf8[i++];
-                }
+                    switch (char_length_utf8) {
+                        case 4: index = (index * ASCIIFOLDING_HASH_WEIGHT) + input_utf8[i++];
+                        case 3: index = (index * ASCIIFOLDING_HASH_WEIGHT) + input_utf8[i++];
+                        case 2: index = (index * ASCIIFOLDING_HASH_WEIGHT) + input_utf8[i++];
+                        case 1: index = (index * ASCIIFOLDING_HASH_WEIGHT) + input_utf8[i++];
+                    }
 
-                index = ((index % ASCIIFOLDING_HASH_TABLE_SIZE) * 5) + 256;
+                    index = ((index % ASCIIFOLDING_HASH_TABLE_SIZE) * 5) + 256;
 
-                unsigned int char_length_ascii = (unsigned int) ascii_tape[index];
-                ascii_length += char_length_ascii;
+                    unsigned int char_length_ascii = (unsigned int) ascii_tape[index];
+                    ascii_length += char_length_ascii;
 
-                unsigned char *replacement = &ascii_tape[index + 1];
+                    unsigned char *replacement = &ascii_tape[index + 1];
 
-                switch (char_length_ascii) {
-                    case 4: *(output_ascii++) = *(replacement++);
-                    case 3: *(output_ascii++) = *(replacement++);
-                    case 2: *(output_ascii++) = *(replacement++);
-                    case 1: *(output_ascii++) = *(replacement++);
+                    switch (char_length_ascii) {
+                        case 4: *(output_ascii++) = *(replacement++);
+                        case 3: *(output_ascii++) = *(replacement++);
+                        case 2: *(output_ascii++) = *(replacement++);
+                        case 1: *(output_ascii++) = *(replacement++);
+                    }
                 }
             }
         #else
