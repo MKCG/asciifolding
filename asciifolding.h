@@ -64,6 +64,16 @@ unsigned int asciifolding(const unsigned char * input_utf8, unsigned int input_l
     int hash_table_size = 3242;
 
     while (i < input_length) {
+        #ifdef ASCIIFOLDING_IS_BRANCHY
+            if (input_utf8[i] < 128) {
+                *output_ascii = input_utf8[i];
+                output_ascii++;
+                ascii_length++;
+                i++;
+                continue;
+            }
+        #endif
+
         unsigned int char_length_utf8 = lut_char_lengths_utf8[input_utf8[i]];
         unsigned int char_is_valid = char_length_utf8 > 0;
         unsigned int rehash = 0;
