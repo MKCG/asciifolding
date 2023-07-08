@@ -84,7 +84,7 @@ def hash_value(encoded, unicode, tape_size, w):
     return idx
 
 def hash_index(encoded, unicode, tape_size, w):
-    return (hash_value(encoded, unicode, tape_size , w) * 5) + 256
+    return (hash_value(encoded, unicode, tape_size , w) * 9) + 256
 
 def is_valid_lut(lut_size, w):
     lut = [ None for i in range(lut_size) ]
@@ -145,7 +145,7 @@ def optimize_hash_params():
     return matches[0]
 
 def create_tape(tape_size, w):
-    tape = [ 0 for _ in range((tape_size * 5) + 256) ]
+    tape = [ 0 for _ in range((tape_size * 9) + 256) ]
 
     for i in range(128, 256):
         tape[i - 128] = 1
@@ -153,6 +153,11 @@ def create_tape(tape_size, w):
 
     for unicode, encoded, asciis in map_unicode_to_ascii():
         idx = hash_index(encoded, unicode, tape_size, w)
+
+        for j in range(len(encoded)):
+            tape[idx] = encoded[j]
+            idx += 1
+
         tape[idx] = len(asciis)
         idx += 1
 

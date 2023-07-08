@@ -70,95 +70,110 @@ unsigned int lut_char_lengths_utf8[256] = {
  *
  * @return              Length of the ascii encoded string
  */
-unsigned int asciifolding(const unsigned char * input_utf8, unsigned int input_length, unsigned char * output_ascii) {
-    unsigned int ascii_length = 0;
-    unsigned int i = 0;
+unsigned long long asciifolding(const unsigned char * input_utf8, unsigned long long input_length, unsigned char * output_ascii) {
+    unsigned long long ascii_length = 0;
 
-    while (i < input_length) {
-        #ifdef ASCIIFOLDING_IS_BRANCHY
+    #ifdef ASCIIFOLDING_IS_BRANCHY
+        const unsigned char * tail_utf8 = input_utf8 + input_length;
+        const unsigned char * head_ascii = output_ascii;
+
+        while (input_utf8 < tail_utf8) {
             #if defined(__AVX2__) && defined(ASCIIFOLDING_USE_SIMD)
-                if (i + 32 < input_length) {
-                    __m256i mask     = _mm256_set1_epi8(0x80);
-                    __m256i vector   = _mm256_loadu_si256((__m256i *) &input_utf8[i]);
-                    __m256i masked   = _mm256_and_si256(vector, mask);
+                if (tail_utf8 - input_utf8 >= 32) {
+                    __m256i mask    = _mm256_set1_epi8(0x80);
+                    __m256i vector  = _mm256_loadu_si256((__m256i *) input_utf8);
+                    __m256i masked  = _mm256_and_si256(vector, mask);
 
-                    int is_not_ascii = _mm256_movemask_epi8(masked);
-                    int is_ascii     = __builtin_ctz(is_not_ascii);
+                    int multibytes_length = _mm256_movemask_epi8(masked);
+                    int nb_leading_ascii  = _tzcnt_u32(multibytes_length);
 
-                    if (is_ascii == 32) {
+                    if (nb_leading_ascii == 32) {
                         _mm256_storeu_si256((__m256i *) output_ascii, vector);
-                        i += 32;
+                        input_utf8 += 32;
                         output_ascii += 32;
-                        ascii_length += 32;
                         continue;
                     } else {
-                        for (int j = 0; j < is_ascii; j++) {
-                            *(output_ascii++) = input_utf8[i++];
+                        while (nb_leading_ascii >= 4) {
+                            *((unsigned int*) output_ascii) = *((unsigned int*) input_utf8);
+                            input_utf8 += 4;
+                            output_ascii += 4;
+                            nb_leading_ascii -= 4;
                         }
 
-                        ascii_length += is_ascii;
+                        while (nb_leading_ascii-- > 0) {
+                            *(output_ascii++) = *(input_utf8++);
+                        }
+
                         goto process_non_ascii;
                     }
                 }
             #else
-                if (sizeof(unsigned long long) == 8 && i + 8 < input_length && (*((unsigned long long *) &input_utf8[i]) & 0x8080808080808080) == 0) {
-                    memcpy(output_ascii, &input_utf8[i], 8);
-                    // *((unsigned long long*) output_ascii) = *((unsigned long long *) &input_utf8[i]);
-                    i += 8;
+                if (sizeof(unsigned long long) == 8 && tail_utf8 - input_utf8 >= 8 && (*((unsigned long long *) input_utf8) & 0x8080808080808080) == 0) {
+                    memcpy(output_ascii, input_utf8, 8);
+                    // *((unsigned long long*) output_ascii) = *((unsigned long long *) input_utf8);
+                    input_utf8   += 8;
                     output_ascii += 8;
-                    ascii_length += 8;
                     continue;
                 }
             #endif
 
-            if (input_utf8[i] < 128) {
-                *(output_ascii++) = input_utf8[i++];
-                ascii_length++;
+            if (*input_utf8 < 128) {
+                *(output_ascii++) = *(input_utf8++);
             } else {
                 process_non_ascii: {
-                    unsigned int char_length_utf8 = lut_char_lengths_utf8[input_utf8[i]];
-                    unsigned int char_is_valid = char_length_utf8 > 0;
-
                     unsigned long long index = 5381;
+                    unsigned int char_length_utf8 = lut_char_lengths_utf8[*input_utf8];
 
                     switch (char_length_utf8) {
-                        case 4: {
-                            index = (index * ASCIIFOLDING_HASH_WEIGHT) + input_utf8[i++];
-                            char_is_valid &= (input_utf8[i] & 192) == 128;
-                        }
-
-                        case 3: {
-                            index = (index * ASCIIFOLDING_HASH_WEIGHT) + input_utf8[i++];
-                            char_is_valid &= (input_utf8[i] & 192) == 128;
-                        }
-
+                        case 4: index = (index * ASCIIFOLDING_HASH_WEIGHT) + *(input_utf8++);
+                        case 3: index = (index * ASCIIFOLDING_HASH_WEIGHT) + *(input_utf8++);
                         case 2: {
-                            index = (index * ASCIIFOLDING_HASH_WEIGHT) + input_utf8[i++];
-                            char_is_valid &= (input_utf8[i] & 192) == 128;
-                            index = (index * ASCIIFOLDING_HASH_WEIGHT) + input_utf8[i++];
+                            index = (index * ASCIIFOLDING_HASH_WEIGHT) + *(input_utf8++);
+                            index = (index * ASCIIFOLDING_HASH_WEIGHT) + *(input_utf8++);
                         }
                     }
 
-                    index = ((index % ASCIIFOLDING_HASH_TABLE_SIZE) * 5) + 256;
+                    index = ((index % ASCIIFOLDING_HASH_TABLE_SIZE) * 9) + 256;
 
-                    if (char_is_valid) {
-                        unsigned char char_length_ascii = ascii_tape[index];
-                        ascii_length += char_length_ascii;
+                    unsigned char * block = &ascii_tape[index];
 
-                        unsigned char *replacement = &ascii_tape[index + 1];
-                        *(output_ascii++) = *(replacement++);
+                    int is_same = char_length_utf8 > 0;
 
-                        switch (char_length_ascii) {
-                            case 4: *(output_ascii++) = *(replacement++);
-                            case 3: *(output_ascii++) = *(replacement++);
-                            case 2: *(output_ascii++) = *(replacement++);
+                    switch (char_length_utf8) {
+                        case 4: is_same &= *(block++) == *(input_utf8 - 4);
+                        case 3: is_same &= *(block++) == *(input_utf8 - 3);
+                        case 2: {
+                            is_same &= *(block++) == *(input_utf8 - 2);
+                            is_same &= *(block++) == *(input_utf8 - 1);
                         }
+                    }
+
+                    unsigned char char_length_ascii;
+                    unsigned char * replacement;
+
+                    if (is_same) {
+                        char_length_ascii = *(block++);
+                        replacement = block;
                     } else {
-                        *(output_ascii++) = input_utf8[i++];
+                        char_length_ascii = char_length_utf8 + (char_length_utf8 == 0);
+                        replacement = input_utf8 - char_length_utf8;
+                    }
+
+                    switch (char_length_ascii) {
+                        case 4: *(output_ascii++) = *(replacement++);
+                        case 3: *(output_ascii++) = *(replacement++);
+                        case 2: *(output_ascii++) = *(replacement++);
+                        case 1: *(output_ascii++) = *(replacement++);
                     }
                 }
             }
-        #else
+        }
+
+        return output_ascii - head_ascii;
+    #else
+        unsigned int i = 0;
+
+        while (i < input_length) {
             unsigned int char_length_utf8 = lut_char_lengths_utf8[input_utf8[i]];
             unsigned int char_is_valid = char_length_utf8 > 0;
             unsigned int rehash = 0;
@@ -189,7 +204,7 @@ unsigned int asciifolding(const unsigned char * input_utf8, unsigned int input_l
             i += char_length_utf8 > 3;
 
             // tape access
-            index = ((index % ASCIIFOLDING_HASH_TABLE_SIZE) * 5) + 256;
+            index = ((index % ASCIIFOLDING_HASH_TABLE_SIZE) * 9) + 256;
             index = (index * char_is_valid) + (invalid_index * (char_is_valid == 0));
 
             unsigned int char_length_ascii = (unsigned int) ascii_tape[index];
@@ -197,6 +212,9 @@ unsigned int asciifolding(const unsigned char * input_utf8, unsigned int input_l
 
             // output
             index++;
+
+            // @todo : detect any collision
+            index += char_length_utf8;
 
             *output_ascii = ascii_tape[index];
             output_ascii++;
@@ -212,10 +230,10 @@ unsigned int asciifolding(const unsigned char * input_utf8, unsigned int input_l
             index += char_length_ascii > 3;
             *output_ascii = ascii_tape[index];
             output_ascii += char_length_ascii > 3;
-        #endif
-    }
+        }
 
-    *output_ascii = 0;
+        *output_ascii = 0;
+    #endif
 
     return ascii_length;
 }
