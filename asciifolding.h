@@ -84,28 +84,22 @@ unsigned long long asciifolding(const unsigned char * input_utf8, unsigned long 
                     __m256i vector  = _mm256_loadu_si256((__m256i *) input_utf8);
                     __m256i masked  = _mm256_and_si256(vector, mask);
 
-                    int multibytes_length = _mm256_movemask_epi8(masked);
-                    int nb_leading_ascii  = _tzcnt_u32(multibytes_length);
+                    _mm256_storeu_si256((__m256i *) output_ascii, vector);
 
-                    if (nb_leading_ascii == 32) {
-                        _mm256_storeu_si256((__m256i *) output_ascii, vector);
+                    int multibytes_length = _mm256_movemask_epi8(masked);
+
+                    if (multibytes_length == 0) {
                         input_utf8 += 32;
                         output_ascii += 32;
                         continue;
-                    } else {
-                        while (nb_leading_ascii >= 4) {
-                            *((unsigned int*) output_ascii) = *((unsigned int*) input_utf8);
-                            input_utf8 += 4;
-                            output_ascii += 4;
-                            nb_leading_ascii -= 4;
-                        }
-
-                        while (nb_leading_ascii-- > 0) {
-                            *(output_ascii++) = *(input_utf8++);
-                        }
-
-                        goto process_non_ascii;
                     }
+
+                    int nb_leading_ascii  = _tzcnt_u32(multibytes_length);
+
+                    output_ascii += nb_leading_ascii;
+                    input_utf8 += nb_leading_ascii;
+
+                    goto process_non_ascii;
                 }
             #else
                 if (sizeof(unsigned long long) == 8 && tail_utf8 - input_utf8 >= 8 && (*((unsigned long long *) input_utf8) & 0x8080808080808080) == 0) {
@@ -159,12 +153,19 @@ unsigned long long asciifolding(const unsigned char * input_utf8, unsigned long 
                         replacement = input_utf8 - char_length_utf8;
                     }
 
+                    *(output_ascii++) = *(replacement++);
+
                     switch (char_length_ascii) {
                         case 4: *(output_ascii++) = *(replacement++);
                         case 3: *(output_ascii++) = *(replacement++);
                         case 2: *(output_ascii++) = *(replacement++);
-                        case 1: *(output_ascii++) = *(replacement++);
                     }
+
+                    #if defined(__AVX2__) && defined(ASCIIFOLDING_USE_SIMD)
+                        if (input_utf8 < tail_utf8 && (*input_utf8 & 0x80)) {
+                            goto process_non_ascii;
+                        }
+                    #endif
                 }
             }
         }
